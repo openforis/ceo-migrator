@@ -13,7 +13,7 @@ public class FullMigrator {
 	@Autowired
 	private ImageryMigrator imageryMigrator;
 	@Autowired
-	private ProjectMigrator projectMigrator;
+	private ProjectsMigrator projectMigrator;
 	
 	public void migrate() {
 		imageryMigrator.migrate();
