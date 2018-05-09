@@ -15,13 +15,16 @@ public abstract class BaseMigrator {
 	protected JsonArray readSourceFileAsArray(String fileName) {
 		Configuration config = ConfigurationProvider.getConfig();
 		String sourceFileLocation = config.getSourceFileLocation();
-		File imageryListFile = new File(sourceFileLocation, fileName);
-		try (FileReader fileReader = new FileReader(imageryListFile)) {
-            JsonElement parsed = new JsonParser().parse(fileReader);
-            JsonArray array = parsed.getAsJsonArray();
-            return array;
-		} catch(IOException e) {
-			throw new RuntimeException(e);
+		File file = new File(sourceFileLocation, fileName);
+		if (file.exists()) {
+			try (FileReader fileReader = new FileReader(file)) {
+	            JsonElement parsed = new JsonParser().parse(fileReader);
+	            return parsed.getAsJsonArray();
+			} catch(IOException e) {
+				throw new RuntimeException(e);
+			}
+		} else {
+			return null;
 		}
 	}
 

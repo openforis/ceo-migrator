@@ -162,9 +162,12 @@ public class ProjectsMigrator extends BaseMigrator {
 			plotLocations.forEach(l -> {
 				JsonObject plotObj = l.getAsJsonObject();
 				SamplingDesignItem plotItem = new SamplingDesignItem();
+				plotItem.setSurveyId(s.getId());
 				String plotLevelCode = String.valueOf(plotIndex.incrementAndGet());
 				plotItem.addLevelCode(plotLevelCode);
 				plotItem.setCoordinate(extractCoordinateFromPoint(plotObj.get("center").getAsString()));
+				plotItem.addInfoAttribute(plotObj.get("flagged").getAsString());
+				
 				batchInserter.process(plotItem);
 				
 				JsonArray samplesArray = plotObj.get("samples").getAsJsonArray();
@@ -172,6 +175,7 @@ public class ProjectsMigrator extends BaseMigrator {
 				samplesArray.forEach(sampleEl -> {
 					JsonObject sampleObj = sampleEl.getAsJsonObject();
 					SamplingDesignItem sampleItem = new SamplingDesignItem();
+					sampleItem.setSurveyId(s.getId());
 					String sampleLevelCode = String.valueOf(sampleIndex.incrementAndGet());
 					sampleItem.addLevelCode(plotLevelCode);
 					sampleItem.addLevelCode(sampleLevelCode);

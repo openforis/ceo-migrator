@@ -14,10 +14,13 @@ public class FullMigrator {
 	private ImageryMigrator imageryMigrator;
 	@Autowired
 	private ProjectsMigrator projectMigrator;
+	@Autowired
+	private DataMigrator dataMigrator;
 	
 	public void migrate() {
 		imageryMigrator.migrate();
 		projectMigrator.migrate();
+		dataMigrator.migrate();
 	}
 	
 	public static void main(String[] args) {
