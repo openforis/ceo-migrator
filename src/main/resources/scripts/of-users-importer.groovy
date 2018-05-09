@@ -91,7 +91,7 @@ def importGroups(jsonArray, jdbcConnectionString, autoCommit) {
     cp.dispose()
 }
 
-def importImageries(jsonArray, jdbcConnectionString, autoCommit) {
+def importImagery(jsonArray, jdbcConnectionString, autoCommit) {
     JdbcConnectionPool cp = JdbcConnectionPool.create(jdbcConnectionString, "", "")
     Connection conn = cp.getConnection()
     conn.autoCommit = autoCommit
@@ -100,8 +100,8 @@ def importImageries(jsonArray, jdbcConnectionString, autoCommit) {
         int groupId = it.institution.getAsInt()
         try {
             def sql = new Sql(conn)
-            def insertSql = "INSERT INTO OF_USERS.OF_GROUP (RESOURCE_TYPE) VALUES ('IMAGERY', ?, ?)"
-            def params = [groupId, groupId]
+            def insertSql = "INSERT INTO OF_USERS.OF_RESOURCE_GROUP (RESOURCE_TYPE, RESOURCE_ID, GROUP_ID) VALUES ('IMAGERY', ?, ?)"
+            def params = [imageryId, groupId]
             sql.executeInsert insertSql, params
         } catch (JdbcSQLException e) {
             println "ERROR! Impossible to insert Imagery with ID = ${imageryId}"
@@ -116,7 +116,7 @@ cli.with {
     h longOpt: 'help', 'Show usage information'
     u longOpt: 'process-users', 'Process Users'
     g longOpt: 'process-groups', 'Process Groups'
-    i longOpt: 'process-imageries', 'Process Imageries'
+    r longOpt: 'process-resources', 'Process Resources (Imagery)'
 }
 def options = cli.parse(args)
 if (!options) {
@@ -130,12 +130,12 @@ def extraArguments = options.arguments()
 if (extraArguments) {
     JsonArray jsonArray = readJsonArrayFromFile(extraArguments[0])
     def jdbcConnectionString = extraArguments[1]
-    autoCommit = false
+    autoCommit = true
     if (options.u) {
         importUsers(jsonArray, jdbcConnectionString, autoCommit)
     } else if (options.g) {
         importGroups(jsonArray, jdbcConnectionString, autoCommit)
-    } else if (options.i) {
-        importImageries(jsonArray, jdbcConnectionString, autoCommit)
+    } else if (options.r) {
+        importImagery(jsonArray, jdbcConnectionString, autoCommit)
     }
 }
