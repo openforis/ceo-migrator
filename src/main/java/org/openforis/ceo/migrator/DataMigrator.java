@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import org.openforis.ceo.migrator.util.JsonUtils;
@@ -64,28 +65,33 @@ public class DataMigrator extends BaseMigrator {
 					JsonObject p = pEl.getAsJsonObject();
 					int analyses = p.get("analyses").getAsInt();
 					if (analyses > 0) {
+						LOGGER.info(format("Migrating data of plot %d...", plotId));
 						analysedPlotCount.incrementAndGet();
-						List<String> recordKeyValues = Arrays.asList(String.valueOf(plotId));
-						NewRecordParameters newRecordParams = new NewRecordParameters();
-						newRecordParams.setAddSecondLevelEntities(true);
-						String username = JsonUtils.getMemberValue(p, "user", String.class);
-						User user = username == null ? userManager.loadAdminUser() : userManager.loadByUserName(username);
-						newRecordParams.setUserId(user == null ? null : user.getId());
-						CollectRecord record = recordGenerator.generate(surveyId, newRecordParams, recordKeyValues);
-						
-						JsonArray samples = p.get("samples").getAsJsonArray();
-						AtomicInteger sampleIndex = new AtomicInteger();
-						samples.forEach(sampleEl -> {
-							JsonObject sampleObj = sampleEl.getAsJsonObject();
-							int sampleId = sampleIndex.incrementAndGet();
-							Entity recordSample = record.getRootEntity().findSingleChildEntityByKeys("subplot", String.valueOf(sampleId));
-							JsonElement valueEl = sampleObj.get("value");
-							if (valueEl != null && !valueEl.isJsonNull()) {
-								JsonObject valueObj = valueEl.getAsJsonObject();
-								setValueInRecord(recordSample, valueObj);
-							}
-						});
-						recordManager.save(record);
+						try {
+							List<String> recordKeyValues = Arrays.asList(String.valueOf(plotId));
+							NewRecordParameters newRecordParams = new NewRecordParameters();
+							newRecordParams.setAddSecondLevelEntities(true);
+							String username = JsonUtils.getMemberValue(p, "user", String.class);
+							User user = username == null ? userManager.loadAdminUser() : userManager.loadByUserName(username);
+							newRecordParams.setUserId(user == null ? null : user.getId());
+							CollectRecord record = recordGenerator.generate(surveyId, newRecordParams, recordKeyValues);
+							
+							JsonArray samples = p.get("samples").getAsJsonArray();
+							AtomicInteger sampleIndex = new AtomicInteger();
+							samples.forEach(sampleEl -> {
+								JsonObject sampleObj = sampleEl.getAsJsonObject();
+								int sampleId = sampleIndex.incrementAndGet();
+								Entity recordSample = record.getRootEntity().findSingleChildEntityByKeys("subplot", String.valueOf(sampleId));
+								JsonElement valueEl = sampleObj.get("value");
+								if (valueEl != null && !valueEl.isJsonNull()) {
+									setValueInRecord(recordSample, valueEl);
+								}
+							});
+							recordManager.save(record);
+							LOGGER.info(format("Data of plot %d migrated successfully into record with id %d", plotId, record.getId()));
+						} catch(Exception e) {
+							LOGGER.log(Level.SEVERE, format("Error migrating data for plot %d: %s", plotId, e.getMessage()), e);
+						}
 					}
 				});
 			}
@@ -93,16 +99,26 @@ public class DataMigrator extends BaseMigrator {
 		}
 	}
 
-	private void setValueInRecord(Entity recordSample, JsonObject valueObj) {
-		Set<Entry<String, JsonElement>> valueEntrySet = valueObj.entrySet();
-		for (Entry<String, JsonElement> valueEntry : valueEntrySet) {
-			String codeListLabel = valueEntry.getKey();
-			String codeItemLabel = valueEntry.getValue().getAsString();
-			CodeList codeList = getCodeListByLabel(recordSample.getSurvey(), codeListLabel);
-			String codeListItemCode = getCodeListItemCode(codeList, codeItemLabel);
+	private void setValueInRecord(Entity recordSample, JsonElement valueEl) {
+		if (valueEl.isJsonObject()) {
+			JsonObject valueObj = valueEl.getAsJsonObject();
+			Set<Entry<String, JsonElement>> valueEntrySet = valueObj.entrySet();
+			for (Entry<String, JsonElement> valueEntry : valueEntrySet) {
+				String codeListLabel = valueEntry.getKey();
+				String codeItemLabel = valueEntry.getValue().getAsString();
+				CodeList codeList = getCodeListByLabel(recordSample.getSurvey(), codeListLabel);
+				String codeListItemCode = getCodeListItemCode(codeList, codeItemLabel);
+				CodeAttributeDefinition codeDef = getValueAttribute(codeList);
+				CodeAttribute codeAttr = recordSample.getChild(codeDef);
+				codeAttr.setValue(new Code(codeListItemCode));
+				codeAttr.updateSummaryInfo();
+			}
+		} else {
+			CodeList codeList = recordSample.getSurvey().getCodeList("values_1");
+			CodeListItem item = codeList.getItem(valueEl.getAsString());
 			CodeAttributeDefinition codeDef = getValueAttribute(codeList);
 			CodeAttribute codeAttr = recordSample.getChild(codeDef);
-			codeAttr.setValue(new Code(codeListItemCode));
+			codeAttr.setValue(new Code(item.getCode()));
 			codeAttr.updateSummaryInfo();
 		}
 	}

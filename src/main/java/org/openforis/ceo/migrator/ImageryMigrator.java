@@ -1,7 +1,5 @@
 package org.openforis.ceo.migrator;
 
-import static org.openforis.ceo.migrator.util.JsonUtils.getMemberValue;
-
 import org.openforis.collect.manager.ImageryManager;
 import org.openforis.collect.model.Imagery;
 import org.openforis.collect.model.Imagery.Visibility;
@@ -9,6 +7,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
 @Component
@@ -28,7 +27,14 @@ public class ImageryMigrator extends BaseMigrator {
 			i.setVisibilityEnum(Visibility.PRIVATE);
 			i.setTitle(obj.get("title").getAsString());
 			i.setAttribution(obj.get("attribution").getAsString());
-			i.setExtent(getMemberValue(obj, "extent", String.class));
+			String extent;
+			JsonElement extentEl = obj.get("extent");
+			if (extentEl == null || extentEl.isJsonNull()) {
+				extent = null;
+			} else {
+				extent = extentEl.toString();
+			}
+			i.setExtent(extent);
 			i.setSourceConfig(obj.get("sourceConfig").getAsJsonObject().toString());
 			
 			imageryManager.save(i, null);

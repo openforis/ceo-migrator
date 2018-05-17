@@ -77,7 +77,7 @@ public class ProjectsMigrator extends BaseMigrator {
 			samplingPointGenerationSettings.setAoiBoundary(extractAoiBoundary(ceoProject));
 			
 			SamplingPointLevelGenerationSettings plotLevelSettings = new SamplingPointLevelGenerationSettings();
-			plotLevelSettings.setNumPoints(ceoProject.get("numPlots").getAsInt());
+			plotLevelSettings.setNumPoints(getMemberValue(ceoProject, "numPlots", Integer.class));
 			plotLevelSettings.setShape(Shape.SQUARE); // AOI shape
 			plotLevelSettings.setPointShape(Shape.valueOf(ceoProject.get("plotShape").getAsString().toUpperCase()));
 			plotLevelSettings
@@ -105,6 +105,13 @@ public class ProjectsMigrator extends BaseMigrator {
 			SimpleSurveyCreator surveyCreator = new SimpleSurveyCreator(surveyManager);
 			CollectSurvey s = surveyCreator.createTemporarySimpleSurvey(SurveyObjects.adjustInternalName(projectName),
 					simpleCodeLists);
+			
+			while (surveyManager.loadSummaryByName(s.getName()) != null) {
+				LOGGER.warning(String.format("Survey with name %s already exists", s.getName()));
+				s.setName(s.getName() + "_2");
+				s.setUri(s.getUri() + "_2");
+			}
+			
 			s.setUserGroupId(ceoProject.get("institution").getAsInt());
 			s.setId(projectId);
 			
@@ -158,6 +165,10 @@ public class ProjectsMigrator extends BaseMigrator {
 	private void migrateSamplingDesign(CollectSurvey s, int projectId) {
 		try (SamplingDesignItemBatchInserter batchInserter = new SamplingDesignItemBatchInserter(samplingDesignManager, s)) {
 			JsonArray plotLocations = readSourceFileAsArray(String.format("plot-data-%d.json", projectId));
+			if (plotLocations == null) {
+				LOGGER.warning(String.format("Plot data not found for project %d", projectId));
+				return;
+			}
 			AtomicInteger plotIndex = new AtomicInteger();
 			plotLocations.forEach(l -> {
 				JsonObject plotObj = l.getAsJsonObject();
