@@ -6,6 +6,8 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
@@ -42,6 +44,7 @@ import com.google.gson.JsonParser;
 @Component
 public class ProjectsMigrator extends BaseMigrator {
 
+	private static final Pattern COMPILE = Pattern.compile("^(.*_)(\\d+)$");
 	private static final Logger LOGGER = Logger.getAnonymousLogger();
 	private static final int SAMPLE_POINT_WIDTH_M = 10;
 
@@ -106,10 +109,16 @@ public class ProjectsMigrator extends BaseMigrator {
 			CollectSurvey s = surveyCreator.createTemporarySimpleSurvey(SurveyObjects.adjustInternalName(projectName),
 					simpleCodeLists);
 			
+			String duplicateName = null;
 			while (surveyManager.loadSummaryByName(s.getName()) != null) {
-				LOGGER.warning(String.format("Survey with name %s already exists", s.getName()));
-				s.setName(s.getName() + "_2");
-				s.setUri(s.getUri() + "_2");
+				if (duplicateName == null) {
+					duplicateName = s.getName();
+				}
+				s.setName(generateNewUniqueName(s.getName()));
+				s.setUri(generateNewUniqueName(s.getUri()));
+			}
+			if (duplicateName != null) {
+				LOGGER.warning(String.format("Survey with name %s already exists, using name %s instead", duplicateName, s.getName()));
 			}
 			
 			s.setUserGroupId(ceoProject.get("institution").getAsInt());
@@ -124,6 +133,18 @@ public class ProjectsMigrator extends BaseMigrator {
 			LOGGER.log(Level.INFO, String.format("Project %d migrated successfully.", projectId));
 		});
 		LOGGER.log(Level.INFO, "Projects migration completed.");
+	}
+
+	private String generateNewUniqueName(String name) {
+		Pattern pattern = COMPILE;
+		Matcher matcher = pattern.matcher(name);
+		if (matcher.matches()) {
+			String lastNumStr = matcher.group(2);
+			int lastNum = Integer.parseInt(lastNumStr);
+			return matcher.group(1) + (lastNum + 1);
+		} else {
+			return name + "_2";
+		}
 	}
 
 	private void saveGeneratedSurvey(CollectSurvey s, Availability availability) {
@@ -153,6 +174,7 @@ public class ProjectsMigrator extends BaseMigrator {
 			values.forEach(valEl -> {
 				JsonObject valObj = valEl.getAsJsonObject();
 				ListItem item = new ListItem();
+				item.setCode(valObj.get("id").getAsString());
 				item.setLabel(valObj.get("name").getAsString());
 				item.setColor(getMemberValue(valObj, "color", String.class, "#000000").substring(1));
 				codeList.addItem(item);
@@ -169,6 +191,7 @@ public class ProjectsMigrator extends BaseMigrator {
 				LOGGER.warning(String.format("Plot data not found for project %d", projectId));
 				return;
 			}
+			AtomicInteger maxSamples = new AtomicInteger();
 			AtomicInteger plotIndex = new AtomicInteger();
 			plotLocations.forEach(l -> {
 				JsonObject plotObj = l.getAsJsonObject();
@@ -182,6 +205,8 @@ public class ProjectsMigrator extends BaseMigrator {
 				batchInserter.process(plotItem);
 				
 				JsonArray samplesArray = plotObj.get("samples").getAsJsonArray();
+				maxSamples.set(Math.max(maxSamples.get(), samplesArray.size()));
+				
 				AtomicInteger sampleIndex = new AtomicInteger();
 				samplesArray.forEach(sampleEl -> {
 					JsonObject sampleObj = sampleEl.getAsJsonObject();
@@ -194,6 +219,7 @@ public class ProjectsMigrator extends BaseMigrator {
 					batchInserter.process(sampleItem);
 				});
 			});
+			LOGGER.info(String.format("%d plots with %d samples per plot defined", plotIndex.get(), maxSamples.get()));
 		} catch(Exception e) {
 			throw new RuntimeException(e);
 		}

@@ -82,9 +82,13 @@ public class DataMigrator extends BaseMigrator {
 								JsonObject sampleObj = sampleEl.getAsJsonObject();
 								int sampleId = sampleIndex.incrementAndGet();
 								Entity recordSample = record.getRootEntity().findSingleChildEntityByKeys("subplot", String.valueOf(sampleId));
-								JsonElement valueEl = sampleObj.get("value");
-								if (valueEl != null && !valueEl.isJsonNull()) {
-									setValueInRecord(recordSample, valueEl);
+								if (recordSample == null) {
+									LOGGER.severe(format("Sample %d not found in plot %d", sampleId, plotId));
+								} else {
+									JsonElement valueEl = sampleObj.get("value");
+									if (valueEl != null && !valueEl.isJsonNull()) {
+										setValueInRecord(recordSample, valueEl);
+									}
 								}
 							});
 							recordManager.save(record);
