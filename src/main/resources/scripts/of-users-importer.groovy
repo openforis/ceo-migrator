@@ -1,5 +1,5 @@
 @GrabConfig(systemClassLoader=true)
-@Grab(group='com.h2database', module='h2', version='1.4.197')
+@Grab(group='com.h2database', module='h2', version='1.4.196')
 @Grab(group='commons-codec', module='commons-codec', version='1.11')
 @Grab(group='commons-io', module='commons-io', version='2.5')
 
@@ -10,7 +10,7 @@ import java.security.MessageDigest
 import org.apache.commons.codec.binary.Hex
 import org.apache.commons.io.IOUtils
 import groovy.sql.Sql
-import groovy.json.JsonSlurper 
+import groovy.json.JsonSlurper
 
 Sql.LOG.level = java.util.logging.Level.SEVERE
 
@@ -27,6 +27,27 @@ def readJsonStringFromFile(filename) {
     assert file.canRead(): "file cannot be read"
     def jsonString = file.getText("UTF-8")
     return jsonString
+}
+
+def truncateTables(jdbcConnectionString, autoCommit) {
+    JdbcConnectionPool cp = JdbcConnectionPool.create(jdbcConnectionString, "", "")
+    Connection conn = cp.getConnection()
+    conn.autoCommit = autoCommit
+    def sql = new Sql(conn)
+    try {
+        sql.withTransaction {
+            sql.execute "TRUNCATE TABLE OF_USERS.OF_USER_GROUP"
+            sql.execute "TRUNCATE TABLE OF_USERS.OF_RESOURCE_GROUP"
+            sql.execute "SET FOREIGN_KEY_CHECKS=0;TRUNCATE TABLE OF_USERS.OF_GROUP;SET FOREIGN_KEY_CHECKS=1;"
+            sql.execute "TRUNCATE TABLE OF_USERS.OF_USER_TOKEN"
+            sql.execute "SET FOREIGN_KEY_CHECKS=0;TRUNCATE TABLE OF_USERS.OF_USER;SET FOREIGN_KEY_CHECKS=1;"
+        }
+    } catch (JdbcSQLException e) {
+        println e
+        println "ERROR! Impossible to truncate tables"
+    }
+    conn.close()
+    cp.dispose()
 }
 
 def importUsers(jsonArray, jdbcConnectionString, autoCommit) {
@@ -131,10 +152,11 @@ def importImagery(jsonArray, jdbcConnectionString, autoCommit) {
     cp.dispose()
 }
 
-def cli = new CliBuilder(usage:'groovy of-users-importer.groovy [-hd] {-u|-g|-i} <sourceFile> <jdbcConnectionString> {logosPath}')
+def cli = new CliBuilder(usage:'groovy of-users-importer.groovy [-hd] {-u|-g|-i} <jdbcConnectionString> {sourceFile} {logosPath}')
 cli.with {
     h longOpt: 'help', 'Show usage information'
-    d longOpt: 'demo', 'DEMO (data will be not saved into the database)'
+    d longOpt: 'demo', 'DEMO (data won\'t be saved into the database)'
+    t longOpt: 'truncate', 'Truncate Tables'
     u longOpt: 'process-users', 'Process Users'
     g longOpt: 'process-groups', 'Process Groups'
     r longOpt: 'process-resources', 'Process Resources (Imagery)'
@@ -153,17 +175,21 @@ if (options.d) {
 }
 def extraArguments = options.arguments()
 if (extraArguments) {
-    def jsonString = readJsonStringFromFile(extraArguments[0])
-    def jsonSlurper = new JsonSlurper()
-    def jsonArray = jsonSlurper.parseText(jsonString)
-    assert jsonArray instanceof List
-    def jdbcConnectionString = extraArguments[1]
-    if (options.u) {
-        importUsers(jsonArray, jdbcConnectionString, autoCommit)
-    } else if (options.g) {
-        def logosPath = extraArguments[2]
-        importGroups(jsonArray, jdbcConnectionString, logosPath, autoCommit)
-    } else if (options.r) {
-        importImagery(jsonArray, jdbcConnectionString, autoCommit)
+    def jdbcConnectionString = extraArguments[0]
+    if (options.t) {
+        truncateTables(jdbcConnectionString, autoCommit)
+    } else {
+        def jsonString = readJsonStringFromFile(extraArguments[1])
+        def jsonSlurper = new JsonSlurper()
+        def jsonArray = jsonSlurper.parseText(jsonString)
+        assert jsonArray instanceof List
+        if (options.u) {
+            importUsers(jsonArray, jdbcConnectionString, autoCommit)
+        } else if (options.g) {
+            def logosPath = extraArguments[2]
+            importGroups(jsonArray, jdbcConnectionString, logosPath, autoCommit)
+        } else if (options.r) {
+            importImagery(jsonArray, jdbcConnectionString, autoCommit)
+        }
     }
 }
